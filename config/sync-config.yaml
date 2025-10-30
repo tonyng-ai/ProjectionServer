@@ -1,0 +1,85 @@
+# Master YAML Configuration for MSSQL to PostgreSQL Sync
+
+# Source Database Configuration (MSSQL)
+source:
+  type: mssql
+  host: localhost
+  port: 1433
+  database: SourceDB
+  username: sa
+  password: YourPassword123!
+  # Connection string format: sqlserver://username:password@host:port?database=dbname
+  
+# Target Database Configuration (PostgreSQL)
+target:
+  type: postgresql
+  host: localhost
+  port: 5432
+  database: targetdb
+  username: postgres
+  password: postgres
+  sslmode: disable
+  # Connection string format: postgres://username:password@host:port/dbname?sslmode=disable
+
+# Default Sync Configuration
+defaults:
+  refresh_rate: 360  # Default refresh rate in seconds (360 = 6 minutes)
+  proto_actor_trigger: true  # Enable ProtoActor scheduled trigger
+  webapi_trigger: true  # Enable WebAPI trigger
+  create_target_table: true  # Auto-create target table if missing
+
+# Table Sync Configurations
+tables:
+  # Example 1: Full table sync with all fields
+  - source_table: dbo.Users
+    target_table: public.users
+    sync_action: full  # Options: full, incremental, custom
+    refresh_rate: 360  # Override default refresh rate (seconds)
+    proto_actor_trigger: true
+    webapi_trigger: true
+    # fields: []  # Empty or omit to sync all fields
+    # filter: ""  # Optional: WHERE clause for source query (e.g., "IsActive = 1")
+    
+  # Example 2: Sync with specific fields only
+  - source_table: dbo.Products
+    target_table: public.products
+    sync_action: full
+    refresh_rate: 180  # Sync every 3 minutes
+    proto_actor_trigger: true
+    webapi_trigger: true
+    fields:
+      - ProductID
+      - ProductName
+      - Price
+      - CategoryID
+      - LastModified
+    # filter: "IsDeleted = 0"  # Only sync non-deleted products
+    
+  # Example 3: Sync with filter
+  - source_table: dbo.Orders
+    target_table: public.orders
+    sync_action: full
+    refresh_rate: 600  # Sync every 10 minutes
+    proto_actor_trigger: true
+    webapi_trigger: true
+    fields:
+      - OrderID
+      - CustomerID
+      - OrderDate
+      - TotalAmount
+      - Status
+    filter: "OrderDate >= DATEADD(day, -30, GETDATE())"  # Last 30 days only
+    
+  # Example 4: Disabled ProtoActor trigger (only manual WebAPI trigger)
+  - source_table: dbo.AuditLog
+    target_table: public.audit_log
+    sync_action: full
+    proto_actor_trigger: false  # Disable automatic sync
+    webapi_trigger: true  # Only manual trigger via API
+    # No filter, sync all fields
+
+# API Server Configuration
+api:
+  host: 0.0.0.0
+  port: 8080
+  enable_cors: true

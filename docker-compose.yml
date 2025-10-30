@@ -1,0 +1,57 @@
+version: '3.8'
+
+services:
+  # MSSQL Source Database
+  mssql:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: mssql-source
+    environment:
+      - ACCEPT_EULA=Y
+      - SA_PASSWORD=YourPassword123!
+      - MSSQL_PID=Developer
+    ports:
+      - "1433:1433"
+    volumes:
+      - mssql-data:/var/opt/mssql
+    networks:
+      - sync-network
+
+  # PostgreSQL Target Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: postgres-target
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=targetdb
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks:
+      - sync-network
+
+  # Sync Service
+  sync-service:
+    build: .
+    container_name: sync-service
+    ports:
+      - "8080:8080"
+    depends_on:
+      - mssql
+      - postgres
+    environment:
+      - CONFIG_PATH=/root/config/sync-config.yaml
+    volumes:
+      - ./config:/root/config
+    networks:
+      - sync-network
+    restart: unless-stopped
+
+volumes:
+  mssql-data:
+  postgres-data:
+
+networks:
+  sync-network:
+    driver: bridge
