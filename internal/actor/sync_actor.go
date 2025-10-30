@@ -3,13 +3,15 @@ package actor
 import (
 	"context"
 	"fmt"
+	"strings"
+	"sync"
 	"time"
 
-	"github.com/AsynkronIT/protoactor-go/actor"
+	"github.com/asynkron/protoactor-go/actor"
 	"go.uber.org/zap"
 
 	"mssql-postgres-sync/internal/config"
-	"mssql-postgres-sync/internal/sync"
+	syncpkg "mssql-postgres-sync/internal/sync"
 )
 
 // Messages
@@ -28,26 +30,30 @@ type SyncResultMessage struct {
 
 // SyncActor handles table synchronization with scheduling
 type SyncActor struct {
-	syncEngine  *sync.SyncEngine
-	tableConfig config.TableConfig
-	defaults    config.DefaultConfig
-	logger      *zap.Logger
-	cancelFunc  context.CancelFunc
+	syncEngine   *syncpkg.SyncEngine
+	tableConfig  config.TableConfig
+	defaults     config.DefaultConfig
+	logger       *zap.Logger
+	actorSystem  *actor.ActorSystem
+	cancelFunc   context.CancelFunc
+	timerMu      sync.Mutex
+	nextSchedule *time.Timer
 }
 
 // NewSyncActor creates a new sync actor
-func NewSyncActor(syncEngine *sync.SyncEngine, tableConfig config.TableConfig, defaults config.DefaultConfig, logger *zap.Logger) actor.Actor {
+func NewSyncActor(syncEngine *syncpkg.SyncEngine, tableConfig config.TableConfig, defaults config.DefaultConfig, logger *zap.Logger, actorSystem *actor.ActorSystem) actor.Actor {
 	return &SyncActor{
 		syncEngine:  syncEngine,
 		tableConfig: tableConfig,
 		defaults:    defaults,
 		logger:      logger,
+		actorSystem: actorSystem,
 	}
 }
 
 // Receive handles incoming messages
 func (a *SyncActor) Receive(ctx actor.Context) {
-	switch msg := ctx.Message().(type) {
+	switch ctx.Message().(type) {
 	case *actor.Started:
 		a.logger.Info("SyncActor started",
 			zap.String("source_table", a.tableConfig.SourceTable),
@@ -56,7 +62,7 @@ func (a *SyncActor) Receive(ctx actor.Context) {
 
 		// Start scheduled sync if enabled
 		if a.tableConfig.GetProtoActorTrigger(a.defaults) {
-			a.scheduleNextSync(ctx)
+			ctx.Send(ctx.Self(), &ScheduleSyncMessage{})
 		}
 
 	case *ScheduleSyncMessage:
@@ -76,7 +82,9 @@ func (a *SyncActor) Receive(ctx actor.Context) {
 		)
 		if a.cancelFunc != nil {
 			a.cancelFunc()
+			a.cancelFunc = nil
 		}
+		a.stopSchedule()
 
 	case *actor.Stopped:
 		a.logger.Info("SyncActor stopped",
@@ -88,7 +96,7 @@ func (a *SyncActor) Receive(ctx actor.Context) {
 // performSync executes the synchronization
 func (a *SyncActor) performSync(ctx actor.Context) {
 	startTime := time.Now()
-	
+
 	a.logger.Info("Performing sync",
 		zap.String("source_table", a.tableConfig.SourceTable),
 		zap.String("target_table", a.tableConfig.TargetTable),
@@ -96,7 +104,11 @@ func (a *SyncActor) performSync(ctx actor.Context) {
 
 	// Create context with timeout
 	syncCtx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
-	defer cancel()
+	a.cancelFunc = cancel
+	defer func() {
+		cancel()
+		a.cancelFunc = nil
+	}()
 
 	// Perform sync
 	err := a.syncEngine.SyncTable(syncCtx, a.tableConfig)
@@ -131,36 +143,55 @@ func (a *SyncActor) performSync(ctx actor.Context) {
 // scheduleNextSync schedules the next sync operation
 func (a *SyncActor) scheduleNextSync(ctx actor.Context) {
 	refreshRate := time.Duration(a.tableConfig.GetRefreshRate(a.defaults)) * time.Second
-	
+	if refreshRate <= 0 {
+		refreshRate = time.Second
+	}
+
 	a.logger.Info("Scheduling next sync",
 		zap.String("table", a.tableConfig.TargetTable),
 		zap.Duration("refresh_rate", refreshRate),
 	)
 
-	// Send delayed message to self
-	ctx.Send(ctx.Self(), &ScheduleSyncMessage{})
-	
-	// Use scheduler for next execution
-	time.AfterFunc(refreshRate, func() {
-		ctx.Send(ctx.Self(), &ScheduleSyncMessage{})
+	pid := ctx.Self()
+
+	a.timerMu.Lock()
+	if a.nextSchedule != nil {
+		a.nextSchedule.Stop()
+	}
+	a.nextSchedule = time.AfterFunc(refreshRate, func() {
+		if a.actorSystem != nil {
+			a.actorSystem.Root.Send(pid, &ScheduleSyncMessage{})
+		}
 	})
+	a.timerMu.Unlock()
+}
+
+func (a *SyncActor) stopSchedule() {
+	a.timerMu.Lock()
+	if a.nextSchedule != nil {
+		a.nextSchedule.Stop()
+		a.nextSchedule = nil
+	}
+	a.timerMu.Unlock()
 }
 
 // CoordinatorActor coordinates all sync actors
 type CoordinatorActor struct {
-	syncEngine *sync.SyncEngine
-	config     *config.Config
-	logger     *zap.Logger
-	syncActors map[string]*actor.PID
+	syncEngine  *syncpkg.SyncEngine
+	config      *config.Config
+	logger      *zap.Logger
+	syncActors  map[string]*actor.PID
+	actorSystem *actor.ActorSystem
 }
 
 // NewCoordinatorActor creates a new coordinator actor
-func NewCoordinatorActor(syncEngine *sync.SyncEngine, cfg *config.Config, logger *zap.Logger) actor.Actor {
+func NewCoordinatorActor(syncEngine *syncpkg.SyncEngine, cfg *config.Config, logger *zap.Logger, actorSystem *actor.ActorSystem) actor.Actor {
 	return &CoordinatorActor{
-		syncEngine: syncEngine,
-		config:     cfg,
-		logger:     logger,
-		syncActors: make(map[string]*actor.PID),
+		syncEngine:  syncEngine,
+		config:      cfg,
+		logger:      logger,
+		syncActors:  make(map[string]*actor.PID),
+		actorSystem: actorSystem,
 	}
 }
 
@@ -218,16 +249,22 @@ func (c *CoordinatorActor) Receive(ctx actor.Context) {
 
 // startSyncActors starts all sync actors based on configuration
 func (c *CoordinatorActor) startSyncActors(ctx actor.Context) {
-	actorSystem := actor.NewActorSystem()
-
 	for _, tableConfig := range c.config.Tables {
-		actorName := fmt.Sprintf("sync-%s", tableConfig.TargetTable)
-		
+		actorName := fmt.Sprintf("sync-%s", sanitizeActorName(tableConfig.TargetTable))
+
 		props := actor.PropsFromProducer(func() actor.Actor {
-			return NewSyncActor(c.syncEngine, tableConfig, c.config.Defaults, c.logger)
+			return NewSyncActor(c.syncEngine, tableConfig, c.config.Defaults, c.logger, c.actorSystem)
 		})
 
-		pid := actorSystem.Root.Spawn(props)
+		pid, err := ctx.SpawnNamed(props, actorName)
+		if err != nil {
+			c.logger.Error("Failed to start sync actor",
+				zap.String("actor", actorName),
+				zap.Error(err),
+			)
+			continue
+		}
+
 		c.syncActors[tableConfig.TargetTable] = pid
 
 		c.logger.Info("Started sync actor",
@@ -236,6 +273,14 @@ func (c *CoordinatorActor) startSyncActors(ctx actor.Context) {
 			zap.String("target_table", tableConfig.TargetTable),
 		)
 	}
+}
+
+func sanitizeActorName(name string) string {
+	sanitized := strings.ReplaceAll(name, " ", "-")
+	sanitized = strings.ReplaceAll(sanitized, ".", "-")
+	sanitized = strings.ReplaceAll(sanitized, "/", "-")
+	sanitized = strings.ReplaceAll(sanitized, "\\", "-")
+	return sanitized
 }
 
 // TriggerSyncMessage triggers sync for a specific table
