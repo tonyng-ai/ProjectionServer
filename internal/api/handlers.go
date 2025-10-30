@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/AsynkronIT/protoactor-go/actor"
+	"github.com/asynkron/protoactor-go/actor"
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 
@@ -44,12 +44,12 @@ type SyncResponse struct {
 
 // TableStatus represents table sync status
 type TableStatus struct {
-	SourceTable      string    `json:"source_table"`
-	TargetTable      string    `json:"target_table"`
-	RefreshRate      int       `json:"refresh_rate"`
-	ProtoActorEnabled bool     `json:"proto_actor_enabled"`
-	WebAPIEnabled    bool      `json:"web_api_enabled"`
-	LastSync         time.Time `json:"last_sync,omitempty"`
+	SourceTable       string    `json:"source_table"`
+	TargetTable       string    `json:"target_table"`
+	RefreshRate       int       `json:"refresh_rate"`
+	ProtoActorEnabled bool      `json:"proto_actor_enabled"`
+	WebAPIEnabled     bool      `json:"web_api_enabled"`
+	LastSync          time.Time `json:"last_sync,omitempty"`
 }
 
 // StatusResponse represents the status response
@@ -77,7 +77,7 @@ func (h *APIHandler) TriggerSync(c *gin.Context) {
 	if req.SyncAll {
 		// Trigger all tables
 		h.ActorSystem.Root.Send(h.CoordinatorPID, &actorpkg.TriggerAllSyncMessage{})
-		
+
 		c.JSON(http.StatusOK, SyncResponse{
 			Success: true,
 			Message: "Sync triggered for all tables",
@@ -134,7 +134,7 @@ func (h *APIHandler) TriggerSync(c *gin.Context) {
 // GetStatus returns the current status
 func (h *APIHandler) GetStatus(c *gin.Context) {
 	var tables []TableStatus
-	
+
 	for _, tc := range h.Config.Tables {
 		tables = append(tables, TableStatus{
 			SourceTable:       tc.SourceTable,
