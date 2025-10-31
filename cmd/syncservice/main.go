@@ -51,7 +51,7 @@ func main() {
 	})
 	coordinatorPID := actorSystem.Root.Spawn(coordinatorProps)
 
-	apiServer := api.NewServer(cfg, logger, coordinatorPID, actorSystem)
+	apiServer := api.NewServer(cfg, logger, coordinatorPID, actorSystem, dbManager)
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()

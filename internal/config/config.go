@@ -9,11 +9,12 @@ import (
 
 // Config represents the master YAML configuration
 type Config struct {
-	Source   DatabaseConfig `yaml:"source"`
-	Target   DatabaseConfig `yaml:"target"`
-	Defaults DefaultConfig  `yaml:"defaults"`
-	Tables   []TableConfig  `yaml:"tables"`
-	API      APIConfig      `yaml:"api"`
+	Source      DatabaseConfig     `yaml:"source"`
+	Target      DatabaseConfig     `yaml:"target"`
+	Defaults    DefaultConfig      `yaml:"defaults"`
+	Tables      []TableConfig      `yaml:"tables"`
+	API         APIConfig          `yaml:"api"`
+	Projections []ProjectionConfig `yaml:"projections"`
 }
 
 // DatabaseConfig represents database connection configuration
@@ -29,22 +30,74 @@ type DatabaseConfig struct {
 
 // DefaultConfig represents default sync configuration
 type DefaultConfig struct {
-	RefreshRate        int  `yaml:"refresh_rate"`
-	ProtoActorTrigger  bool `yaml:"proto_actor_trigger"`
-	WebAPITrigger      bool `yaml:"webapi_trigger"`
-	CreateTargetTable  bool `yaml:"create_target_table"`
+	RefreshRate       int  `yaml:"refresh_rate"`
+	ProtoActorTrigger bool `yaml:"proto_actor_trigger"`
+	WebAPITrigger     bool `yaml:"webapi_trigger"`
+	CreateTargetTable bool `yaml:"create_target_table"`
 }
 
 // TableConfig represents individual table sync configuration
 type TableConfig struct {
-	SourceTable        string   `yaml:"source_table"`
-	TargetTable        string   `yaml:"target_table"`
-	SyncAction         string   `yaml:"sync_action"`
-	RefreshRate        *int     `yaml:"refresh_rate,omitempty"`
-	ProtoActorTrigger  *bool    `yaml:"proto_actor_trigger,omitempty"`
-	WebAPITrigger      *bool    `yaml:"webapi_trigger,omitempty"`
-	Fields             []string `yaml:"fields,omitempty"`
-	Filter             string   `yaml:"filter,omitempty"`
+	SourceTable       string   `yaml:"source_table"`
+	TargetTable       string   `yaml:"target_table"`
+	SyncAction        string   `yaml:"sync_action"`
+	RefreshRate       *int     `yaml:"refresh_rate,omitempty"`
+	ProtoActorTrigger *bool    `yaml:"proto_actor_trigger,omitempty"`
+	WebAPITrigger     *bool    `yaml:"webapi_trigger,omitempty"`
+	Fields            []string `yaml:"fields,omitempty"`
+	Filter            string   `yaml:"filter,omitempty"`
+}
+
+// ProjectionConfig represents UI projection configuration for a target view
+type ProjectionConfig struct {
+	ID              string                   `yaml:"id" json:"id"`
+	Title           string                   `yaml:"title" json:"title"`
+	Description     string                   `yaml:"description,omitempty" json:"description,omitempty"`
+	TargetView      string                   `yaml:"target_view" json:"target_view"`
+	SyncTable       string                   `yaml:"sync_table" json:"sync_table"`
+	HeaderColor     string                   `yaml:"header_color,omitempty" json:"header_color,omitempty"`
+	HeaderTextColor string                   `yaml:"header_text_color,omitempty" json:"header_text_color,omitempty"`
+	DefaultSort     *ProjectionSortConfig    `yaml:"default_sort,omitempty" json:"default_sort,omitempty"`
+	GroupBy         []string                 `yaml:"group_by,omitempty" json:"group_by,omitempty"`
+	Fields          []ProjectionFieldConfig  `yaml:"fields,omitempty" json:"fields,omitempty"`
+	Filters         []ProjectionFilterConfig `yaml:"filters,omitempty" json:"filters,omitempty"`
+	Totals          []ProjectionTotalConfig  `yaml:"totals,omitempty" json:"totals,omitempty"`
+}
+
+// ProjectionFieldConfig describes a field to display in the UI
+type ProjectionFieldConfig struct {
+	Column   string `yaml:"column" json:"column"`
+	Label    string `yaml:"label" json:"label"`
+	Type     string `yaml:"type,omitempty" json:"type,omitempty"`
+	Sortable *bool  `yaml:"sortable,omitempty" json:"sortable,omitempty"`
+}
+
+// ProjectionFilterConfig describes a filter input for the UI
+type ProjectionFilterConfig struct {
+	ID      string                         `yaml:"id" json:"id"`
+	Column  string                         `yaml:"column" json:"column"`
+	Label   string                         `yaml:"label" json:"label"`
+	Type    string                         `yaml:"type" json:"type"`
+	Options []ProjectionFilterOptionConfig `yaml:"options,omitempty" json:"options,omitempty"`
+}
+
+// ProjectionFilterOptionConfig describes a selectable filter option
+type ProjectionFilterOptionConfig struct {
+	Label string `yaml:"label" json:"label"`
+	Value string `yaml:"value" json:"value"`
+}
+
+// ProjectionSortConfig describes default sorting
+type ProjectionSortConfig struct {
+	Column    string `yaml:"column" json:"column"`
+	Direction string `yaml:"direction" json:"direction"`
+}
+
+// ProjectionTotalConfig describes a total aggregation for a column
+type ProjectionTotalConfig struct {
+	Column string `yaml:"column" json:"column"`
+	Label  string `yaml:"label" json:"label"`
+	Format string `yaml:"format,omitempty" json:"format,omitempty"`
 }
 
 // APIConfig represents API server configuration
@@ -109,4 +162,14 @@ func LoadConfig(path string) (*Config, error) {
 	}
 
 	return &config, nil
+}
+
+// GetProjectionByID returns a projection configuration by its identifier
+func (c *Config) GetProjectionByID(id string) (*ProjectionConfig, bool) {
+	for i := range c.Projections {
+		if c.Projections[i].ID == id {
+			return &c.Projections[i], true
+		}
+	}
+	return nil, false
 }

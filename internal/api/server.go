@@ -12,6 +12,7 @@ import (
 	"go.uber.org/zap"
 
 	"mssql-postgres-sync/internal/config"
+	"mssql-postgres-sync/internal/database"
 )
 
 // Server represents the API server
@@ -24,8 +25,8 @@ type Server struct {
 }
 
 // NewServer creates a new API server
-func NewServer(cfg *config.Config, logger *zap.Logger, coordinatorPID *actor.PID, actorSystem *actor.ActorSystem) *Server {
-	handler := NewAPIHandler(cfg, logger, coordinatorPID, actorSystem)
+func NewServer(cfg *config.Config, logger *zap.Logger, coordinatorPID *actor.PID, actorSystem *actor.ActorSystem, dbManager *database.DatabaseManager) *Server {
+	handler := NewAPIHandler(cfg, logger, coordinatorPID, actorSystem, dbManager)
 
 	return &Server{
 		Config:      cfg,
@@ -62,6 +63,8 @@ func (s *Server) Start() error {
 	{
 		api.GET("/health", s.Handler.HealthCheck)
 		api.GET("/status", s.Handler.GetStatus)
+		api.GET("/projections", s.Handler.ListProjections)
+		api.GET("/projections/:id/data", s.Handler.GetProjectionData)
 		api.POST("/sync", s.Handler.TriggerSync)
 	}
 
