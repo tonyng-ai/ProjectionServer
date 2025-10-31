@@ -89,6 +89,55 @@ tables:
     webapi_trigger: true
     # fields: []  # Optional: specific fields only
     # filter: ""  # Optional: WHERE clause
+
+# Projection UI Configuration
+projections:
+  - id: users-overview
+    title: "Users Overview"
+    description: "Summary of users with subscription and activity status"
+    target_view: public.users
+    sync_table: public.users
+    header_color: "#1f2937"
+    header_text_color: "#f9fafb"
+    default_sort:
+      column: LastModified
+      direction: desc
+    group_by:
+      - Status
+    fields:
+      - column: UserID
+        label: User ID
+        type: number
+        sortable: true
+      - column: ProductName
+        label: Primary Subscription
+        type: text
+        sortable: true
+      - column: LastModified
+        label: Last Seen
+        type: datetime
+        sortable: true
+      - column: Status
+        label: Status
+        type: badge
+        sortable: false
+    filters:
+      - id: status
+        column: Status
+        label: Status
+        type: select
+        options:
+          - label: Active
+            value: Active
+          - label: Inactive
+            value: Inactive
+          - label: Suspended
+            value: Suspended
+    totals:
+      - column: UserID
+        label: Total Users
+        format: count
+
 ```
 
 ### Configuration Options
