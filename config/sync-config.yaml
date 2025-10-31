@@ -83,3 +83,105 @@ api:
   host: 0.0.0.0
   port: 8080
   enable_cors: true
+
+# Projection UI Configuration
+projections:
+  - id: users-overview
+    title: "Users Overview"
+    description: "Summary of users with subscription and activity status"
+    target_view: public.users
+    sync_table: public.users
+    header_color: "#1f2937"
+    header_text_color: "#f9fafb"
+    default_sort:
+      column: LastModified
+      direction: desc
+    group_by:
+      - Status
+    fields:
+      - column: UserID
+        label: User ID
+        type: number
+        sortable: true
+      - column: ProductName
+        label: Primary Subscription
+        type: text
+        sortable: true
+      - column: LastModified
+        label: Last Seen
+        type: datetime
+        sortable: true
+      - column: Status
+        label: Status
+        type: badge
+        sortable: false
+    filters:
+      - id: status
+        column: Status
+        label: Status
+        type: select
+        options:
+          - label: Active
+            value: Active
+          - label: Inactive
+            value: Inactive
+          - label: Suspended
+            value: Suspended
+    totals:
+      - column: UserID
+        label: Total Users
+        format: count
+
+  - id: orders-performance
+    title: "Orders Performance"
+    description: "Recent orders with revenue totals"
+    target_view: public.orders
+    sync_table: public.orders
+    header_color: "#0f766e"
+    header_text_color: "#ecfeff"
+    default_sort:
+      column: OrderDate
+      direction: desc
+    group_by:
+      - Status
+    fields:
+      - column: OrderID
+        label: Order #
+        type: number
+        sortable: true
+      - column: CustomerID
+        label: Customer #
+        type: number
+        sortable: true
+      - column: OrderDate
+        label: Order Date
+        type: date
+        sortable: true
+      - column: TotalAmount
+        label: Total Amount
+        type: currency
+        sortable: true
+      - column: Status
+        label: Status
+        type: text
+        sortable: true
+    filters:
+      - id: status
+        column: Status
+        label: Status
+        type: select
+        options:
+          - label: Pending
+            value: Pending
+          - label: Shipped
+            value: Shipped
+          - label: Cancelled
+            value: Cancelled
+      - id: minimum_total
+        column: TotalAmount
+        label: Minimum Total Amount
+        type: number
+    totals:
+      - column: TotalAmount
+        label: Total Revenue
+        format: currency
