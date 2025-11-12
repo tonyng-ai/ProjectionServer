@@ -32,7 +32,6 @@ namespace date {
 
 using std::chrono::abs;
 using std::chrono::ceil;
-using std::chrono::choose;
 using std::chrono::days;
 using std::chrono::floor;
 using std::chrono::hh_mm_ss;
@@ -58,6 +57,12 @@ using std::chrono::year_month_day;
 using std::chrono::year_month_day_last;
 using std::chrono::year_month_weekday;
 using std::chrono::year_month_weekday_last;
+
+#if defined(_MSC_VER) && _MSC_VER < 1930
+enum class choose { earliest, latest, next };
+#else
+using std::chrono::choose;
+#endif
 
 template <class Duration>
 using sys_time = std::chrono::sys_time<Duration>;
@@ -115,11 +120,21 @@ auto parse(Args&&... args)
     return std::chrono::parse(std::forward<Args>(args)...);
 }
 
+#if !defined(_MSC_VER) || _MSC_VER >= 1930
 template <class TimeZone, class Duration>
 inline auto make_zoned(TimeZone&& tz, local_time<Duration> lt, choose c)
     -> decltype(std::chrono::zoned_time(std::forward<TimeZone>(tz), lt, c)) {
     return std::chrono::zoned_time(std::forward<TimeZone>(tz), lt, c);
 }
+#else
+template <class TimeZone, class Duration>
+inline auto make_zoned(TimeZone&&, local_time<Duration>, choose)
+    -> std::chrono::zoned_time<Duration, const std::chrono::time_zone*> {
+    static_assert(sizeof(TimeZone) == 0,
+                  "std::chrono::zoned_time constructors that take std::chrono::choose "
+                  "are not available in this standard library implementation.");
+}
+#endif
 
 template <class TimeZone, class TimePoint>
 inline auto make_zoned(TimeZone&& tz, TimePoint&& tp)
