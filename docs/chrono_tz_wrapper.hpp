@@ -102,22 +102,13 @@ inline std::string remote_version() {
     return std::chrono::remote_version();
 }
 
+using std::chrono::format;
+using std::chrono::parse;
+
 template <class... Args>
 constexpr auto make_zoned(Args&&... args)
     -> decltype(std::chrono::zoned_time(std::forward<Args>(args)...)) {
     return std::chrono::zoned_time(std::forward<Args>(args)...);
-}
-
-template <class... Args>
-auto format(Args&&... args)
-    -> decltype(std::chrono::format(std::forward<Args>(args)...)) {
-    return std::chrono::format(std::forward<Args>(args)...);
-}
-
-template <class... Args>
-auto parse(Args&&... args)
-    -> decltype(std::chrono::parse(std::forward<Args>(args)...)) {
-    return std::chrono::parse(std::forward<Args>(args)...);
 }
 
 #if !defined(_MSC_VER) || _MSC_VER >= 1930
