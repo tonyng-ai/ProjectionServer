@@ -78,7 +78,7 @@ inline const time_zone* locate_zone(std::string_view name) {
 }
 
 inline const time_zone* current_zone() {
-    return std::chrono::current_zone();
+    return get_tzdb().current_zone();
 }
 
 inline const tzdb& get_tzdb() noexcept {
